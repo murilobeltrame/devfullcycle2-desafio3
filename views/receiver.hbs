@@ -4,8 +4,259 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WebRTC App | Receiver</title>
+    <style>
+        table, .block{
+            width: 100%;
+        }
+        .hidden {
+            visibility: hidden;
+        }
+        .display-box {
+            border: 2px solid black;
+        }
+        .reset { background: red;}
+        .go { background: green;}
+        .fade { background: yellow;}
+        .off { background: gray;}
+    </style>
 </head>
 <body>
     <h1>{Receiver} of a Web RTC App</h1>
+    <table>
+        <tr>
+            <th>Status</th>
+            <th>Messages</th>
+        </tr>
+        <tr>
+            <td>
+                <span id="receiverId" style="font-weight: bolder;">ID:</span>
+            </td>
+            <td>
+                <input type="text" id="sendMessageBox" placeholder="Enter a message..." autofocus="true">
+                <button id="sendButton">Send</button>
+                <button id="clearMessagesButton">Clear Messages (Local)</button>
+            </td>
+        </tr>
+        <tr>
+            <td>
+                <div id="statusContainer"></div>
+            </td>
+            <td>
+                <div id="messagesContainer"></div>
+            </td>
+        </tr>
+        <tr>
+            <td class="display-box reset" id="resetBox">
+                <h2>Standby</h2>
+            </td>
+            <td class="display-box hidden" id="goBox">
+                <h2>Go</h2>
+            </td>
+        </tr>
+        <tr>
+            <td class="display-box hidden" id="fadeBox">
+                <h2>Fade</h2>
+            </td>
+            <td class="display-box hidden" id="offBox">
+                <h2>All Off</h2>
+            </td>
+        </tr>
+    </table>
+    <script src="https://unpkg.com/peerjs@1.0.0/dist/peerjs.min.js"></script>
+    <script>
+        (function(){
+
+            var lastPeerId = null;
+            var peer = null; // own peer object
+            var conn = null;
+            var cueString = "<span class=\"cueMsg\">Cue: </span>";
+
+            var statusContainer = document.querySelector('#statusContainer');
+            var messagesContainer = document.querySelector('#messagesContainer');
+
+            /**
+            * Create the Peer object for our end of the connection.
+            *
+            * Sets up callbacks that handle any events related to our
+            * peer object.
+            */
+            function initialize() {
+
+                // Create own peer object with connection to shared PeerJS server
+                peer = new Peer(null, {
+                    debug: 2
+                });
+
+                // Connection OPEN handler
+                peer.on('open', function (id) {
+                    // Workaround for peer.reconnect deleting previous id
+                    if (peer.id === null) {
+                        console.log('Received null id from peer open');
+                        peer.id = lastPeerId;
+                    } else {
+                        lastPeerId = peer.id;
+                    }
+
+                    console.log('ID: ' + peer.id);
+                    document.querySelector('#receiverId').innerHTML = "ID: " + peer.id;
+                    statusContainer.innerHTML = "Awaiting connection...";
+                });
+
+                // Connection STABLISHED handler
+                peer.on('connection', function (c) {
+                    // Allow only a single connection
+                    if (conn && conn.open) {
+                        c.on('open', function() {
+                            c.send("Already connected to another client");
+                            setTimeout(function() { c.close(); }, 500);
+                        });
+                        return;
+                    }
+
+                    conn = c;
+                    console.log("Connected to: " + conn.peer);
+                    statusContainer.innerHTML = "Connected";
+                    ready();
+                });
+
+                // Connection BROKEN handler
+                peer.on('disconnected', function () {
+                    statusContainer.innerHTML = "Connection lost. Please reconnect";
+                    console.log('Connection lost. Please reconnect');
+
+                    // Workaround for peer.reconnect deleting previous id
+                    peer.id = lastPeerId;
+                    peer._lastServerId = lastPeerId;
+                    peer.reconnect();
+                });
+
+                // Connection CLOSED handler
+                peer.on('close', function() {
+                    conn = null;
+                    statusContainer.innerHTML = "Connection destroyed. Please refresh";
+                    console.log('Connection destroyed');
+                });
+
+                // Connection ERROR handler
+                peer.on('error', function (err) {
+                    console.log(err);
+                    alert('' + err);
+                });
+
+            }
+
+            /**
+            * Triggered once a connection has been achieved.
+            * Defines callbacks to handle incoming data and connection events.
+            */
+            function ready() {
+                conn.on('data', function (data) {
+                    console.log("Data recieved");
+                    var cueString = "<span class=\"cueMsg\">Cue: </span>";
+                    switch (data) {
+                        case 'Go':
+                            //go();
+                            command('go');
+                            addMessage(cueString + data);
+                            break;
+                        case 'Fade':
+                            //fade();
+                            command('fade');
+                            addMessage(cueString + data);
+                            break;
+                        case 'Off':
+                            //off();
+                            command('off');
+                            addMessage(cueString + data);
+                            break;
+                        case 'Reset':
+                            //reset();
+                            command('reset');
+                            addMessage(cueString + data);
+                            break;
+                        default:
+                            addMessage("<span class=\"peerMsg\">Peer: </span>" + data);
+                            break;
+                    };
+                });
+                conn.on('close', function () {
+                    statusContainer.innerHTML = "Connection reset<br>Awaiting connection...";
+                    conn = null;
+                });
+            }
+
+            /**
+            * Apply Command
+            */
+            function command(cmd) {
+                document.querySelectorAll('.display-box').forEach(function(element) {
+                    element.className = 'display-box hidden'
+                })
+                var selectedElement = document.querySelector(`#${cmd}Box`)
+                selectedElement.classList.remove('hidden');
+                selectedElement.classList.add(cmd);
+            }
+
+            /**
+            * Adds a formatted message
+            */
+            function addMessage(msg) {
+                var now = new Date();
+                var h = now.getHours();
+                var m = addZero(now.getMinutes());
+                var s = addZero(now.getSeconds());
+
+                if (h > 12)
+                    h -= 12;
+                else if (h === 0)
+                    h = 12;
+
+                function addZero(t) {
+                    if (t < 10)
+                        t = "0" + t;
+                    return t;
+                };
+
+                messagesContainer.innerHTML = "<br><span class=\"msg-time\">" + h + ":" + m + ":" + s + "</span>  -  " + msg + messagesContainer.innerHTML;
+            }
+
+            /**
+            * Clears messages
+            */
+            function clearMessages() {
+                messagesContainer.innerHTML = '';
+                addMessage('Messages cleared');
+            }
+
+            // DOM Handlers
+            var sendMessageBox = document.querySelector('#sendMessageBox');
+            var sendButton = document.querySelector('#sendButton');
+
+            sendMessageBox.addEventListener('keypress', function(e) {
+                var event = e || window.event;
+                var char = event.which || event.keyCode;
+                if (char == '13')
+                    sendButton.click();
+            });
+
+            sendButton.addEventListener('click', function() {
+                if (conn && conn.open) {
+                    var msg = sendMessageBox.value;
+                    sendMessageBox.value = "";
+                    conn.send(msg);
+                    console.log("Sent: " + msg);
+                    addMessage("<span class=\"selfMsg\">Self: </span> " + msg);
+                } else {
+                    console.log('Connection is closed');
+                }
+            });
+
+            document.querySelector('#clearMessagesButton').addEventListener('click', clearMessages);
+
+            // Since all our callbacks are setup, start the process of obtaining an ID
+            initialize();
+
+        })();
+    </script>
 </body>
 </html>
