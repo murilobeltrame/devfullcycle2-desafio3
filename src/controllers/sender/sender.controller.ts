@@ -1,4 +1,10 @@
-import { Controller } from '@nestjs/common';
+import { Controller, Get, Render } from '@nestjs/common';
 
 @Controller('sender')
-export class SenderController {}
+export class SenderController {
+    @Get()
+    @Render('sender.hbs')
+    index(): string {
+        return
+    }
+}
